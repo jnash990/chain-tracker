@@ -1,0 +1,5 @@
+/* Custom overrides for Chain Tracker */
+
+.hidden {
+  display: none !important;
+}
