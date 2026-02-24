@@ -80,6 +80,17 @@ export async function fetchWithRateLimit(url, retried = false) {
 const BASE = 'https://api.torn.com/v2';
 
 /**
+ * Fetch faction members (id -> name mapping)
+ * @param {string} apiKey
+ * @returns {Promise<Object[]>} members array
+ */
+export async function fetchFactionMembers(apiKey) {
+  const url = `${BASE}/faction/members?key=${apiKey}`;
+  const data = await fetchWithRateLimit(url);
+  return data.members ?? [];
+}
+
+/**
  * Fetch current chain status
  * @param {string} apiKey
  * @returns {Promise<Object|null>} chain data or null if no active chain
@@ -94,10 +105,23 @@ export async function fetchCurrentChain(apiKey) {
 /**
  * Fetch list of previous chains (for when no active chain)
  * @param {string} apiKey
- * @returns {Promise<Object>} { chains: [{ id, chain, respect, start, end }, ...] }
+ * @param {Object} [options]
+ * @param {number} [options.limit=10]
+ * @param {string} [options.before] - Cursor for pagination
+ * @returns {Promise<Object>} { chains, _metadata }
  */
-export async function fetchFactionChains(apiKey) {
-  const url = `${BASE}/faction/chains?limit=100&key=${apiKey}`;
+export async function fetchFactionChains(apiKey, { limit = 10, before } = {}) {
+  let url;
+  if (before && before.startsWith('http')) {
+    const u = new URL(before);
+    u.searchParams.set('key', apiKey);
+    url = u.toString();
+  } else {
+    url = `${BASE}/faction/chains?limit=${limit}&key=${apiKey}`;
+    if (before) {
+      url += `&before=${encodeURIComponent(before)}`;
+    }
+  }
   return fetchWithRateLimit(url);
 }
 
@@ -126,7 +150,7 @@ export async function fetchFactionNews({ apiKey, before }) {
     u.searchParams.set('key', apiKey);
     url = u.toString();
   } else {
-    url = `${BASE}/faction/news?cat=armoryAction&stripTags=true&sort=desc&limit=100&key=${apiKey}`;
+    url = `${BASE}/faction/news?cat=armoryAction&stripTags=false&sort=desc&limit=100&key=${apiKey}`;
     if (before) {
       url += `&before=${encodeURIComponent(before)}`;
     }

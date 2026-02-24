@@ -6,10 +6,12 @@ const container = document.getElementById('app');
 let apiKeySubmitCallback = null;
 let selectChainCallback = null;
 
-export function setCallbacks({ onApiKeySubmit, onSelectChain }) {
+export function setCallbacks({ onApiKeySubmit, onSelectChain, onLoadMoreChains }) {
   apiKeySubmitCallback = onApiKeySubmit;
   selectChainCallback = onSelectChain;
+  onLoadMoreChainsCallback = onLoadMoreChains;
 }
+let onLoadMoreChainsCallback = null;
 const apiKeySection = document.getElementById('api-key-section');
 const apiKeyForm = document.getElementById('api-key-form');
 const apiKeyInput = document.getElementById('api-key-input');
@@ -30,14 +32,14 @@ function formatNum(n) {
   return Number(n).toLocaleString();
 }
 
-function buildMemberRows(chain) {
+function buildMemberRows(chain, membersMap = {}) {
   const hits = chain.hits ?? {};
   const consumption = chain.consumption ?? {};
   const members = new Map();
 
   for (const [id, data] of Object.entries(hits)) {
-    const name = data.name ?? id;
-    members.set(name, {
+    const name = data.name ?? membersMap[id] ?? id;
+    members.set(id, {
       id,
       name,
       hits: data.hits ?? 0,
@@ -47,11 +49,13 @@ function buildMemberRows(chain) {
     });
   }
 
-  for (const [name, data] of Object.entries(consumption)) {
-    const m = members.get(name) ?? { id: name, name, hits: 0, respect: 0, xanax: 0, points: 0 };
+  for (const [id, data] of Object.entries(consumption)) {
+    const name = data.name ?? membersMap[id] ?? id;
+    const m = members.get(id) ?? { id, name, hits: 0, respect: 0, xanax: 0, points: 0 };
     m.xanax = (m.xanax || 0) + (data.xanax ?? 0);
     m.points = (m.points || 0) + (data.points ?? 0);
-    members.set(name, m);
+    m.name = name || m.name;
+    members.set(id, m);
   }
 
   return Array.from(members.values());
@@ -60,8 +64,8 @@ function buildMemberRows(chain) {
 /**
  * Render sortable member table
  */
-function renderTable(chain, sortKey = 'hits', sortDir = 'desc') {
-  const rows = buildMemberRows(chain);
+function renderTable(chain, sortKey = 'hits', sortDir = 'desc', membersMap = {}) {
+  const rows = buildMemberRows(chain, membersMap);
   const sorted = [...rows].sort((a, b) => {
     let va = a[sortKey] ?? 0;
     let vb = b[sortKey] ?? 0;
@@ -126,10 +130,10 @@ function renderTable(chain, sortKey = 'hits', sortDir = 'desc') {
   if (wrap) {
     wrap.innerHTML = html;
     wrap.querySelectorAll('[data-sort]').forEach((th) => {
-      th.addEventListener('click', () => {
+        th.addEventListener('click', () => {
         const key = th.dataset.sort;
         const nextDir = sortKey === key && sortDir === 'desc' ? 'asc' : 'desc';
-        renderTable(chain, key, nextDir);
+        renderTable(chain, key, nextDir, membersMap);
       });
     });
   }
@@ -180,23 +184,40 @@ function formatDate(ts) {
   }
 }
 
-export function showNoActiveChain(apiChains, cachedChains, apiKey, onFetchChainFromApi) {
+export function showNoActiveChain(apiChains, cachedChains, apiKey, metadata, onFetchChainFromApi, onLoadMoreChains, accumulatedApiChains = null) {
   showSection('no-chain');
   const list = document.getElementById('historical-chains');
   if (!list) return;
 
-  const sortedApiChains = (apiChains ?? [])
-    .sort((a, b) => (b.id ?? b.chain ?? 0) - (a.id ?? a.chain ?? 0));
+  const chainsToShow = accumulatedApiChains ?? apiChains ?? [];
+  const sortedCached = (cachedChains ?? [])
+    .sort((a, b) => (b.chainId ?? 0) - (a.chainId ?? 0))
+    .slice(0, 10);
+  const sortedApiChains = [...chainsToShow].sort((a, b) => (b.id ?? b.chain ?? 0) - (a.id ?? a.chain ?? 0));
 
-  if (sortedApiChains.length === 0 && (!cachedChains || cachedChains.length === 0)) {
+  const links = metadata?._metadata?.links ?? metadata?.links ?? {};
+  const nextLink = links.next ?? metadata?.next;
+  const hasMore = Boolean(nextLink);
+
+  if (sortedCached.length === 0 && sortedApiChains.length === 0) {
     list.innerHTML = '<p class="text-gray-500 text-sm">No chains found.</p>';
     return;
   }
 
   let html = '';
 
+  if (sortedCached.length > 0) {
+    html += '<p class="text-xs text-gray-500 uppercase font-medium mb-2">Previously loaded (cached)</p>';
+    html += sortedCached
+      .map(
+        (c) =>
+          `<button type="button" class="block w-full text-left px-4 py-2 rounded hover:bg-gray-100 text-sm mb-1" data-cached-chain data-chain-id="${c.chainId}">Chain #${c.chainId} — ${formatNum(c.totals?.hits ?? 0)} hits</button>`
+      )
+      .join('');
+  }
+
   if (sortedApiChains.length > 0) {
-    html += '<p class="text-xs text-gray-500 uppercase font-medium mb-2">Fetch from API</p>';
+    html += '<p class="text-xs text-gray-500 uppercase font-medium mb-2 mt-4">Fetch from API</p>';
     html += sortedApiChains
       .map(
         (c) => {
@@ -207,20 +228,9 @@ export function showNoActiveChain(apiChains, cachedChains, apiKey, onFetchChainF
         }
       )
       .join('');
-  }
-
-  const sortedCached = (cachedChains ?? [])
-    .sort((a, b) => (b.chainId ?? 0) - (a.chainId ?? 0))
-    .slice(0, 10);
-
-  if (sortedCached.length > 0) {
-    html += '<p class="text-xs text-gray-500 uppercase font-medium mb-2 mt-4">Previously loaded</p>';
-    html += sortedCached
-      .map(
-        (c) =>
-          `<button type="button" class="block w-full text-left px-4 py-2 rounded hover:bg-gray-100 text-sm mb-1" data-cached-chain data-chain-id="${c.chainId}">Chain #${c.chainId} — ${formatNum(c.totals?.hits ?? 0)} hits (cached)</button>`
-      )
-      .join('');
+    if (hasMore && onLoadMoreChainsCallback) {
+      html += `<button type="button" class="mt-2 px-4 py-2 text-sm text-blue-600 hover:text-blue-800 font-medium" data-load-more>Load more chains</button>`;
+    }
   }
 
   list.innerHTML = html || '<p class="text-gray-500 text-sm">No chains found.</p>';
@@ -242,9 +252,17 @@ export function showNoActiveChain(apiChains, cachedChains, apiKey, onFetchChainF
       if (selectChainCallback) selectChainCallback(Number(btn.dataset.chainId));
     });
   });
+
+  const loadMoreBtn = list.querySelector('[data-load-more]');
+  if (loadMoreBtn && onLoadMoreChainsCallback) {
+    loadMoreBtn.addEventListener('click', () => {
+      const nextUrl = typeof nextLink === 'string' ? nextLink : nextLink?.url ?? nextLink?.href ?? nextLink;
+      onLoadMoreChainsCallback(apiKey, { nextLink: nextUrl, metadata }, sortedApiChains);
+    });
+  }
 }
 
-export function showDashboard(chain, apiKey) {
+export function showDashboard(chain, apiKey, membersMap = {}) {
   showSection('dashboard');
 
   const badge = document.getElementById('status-badge');
@@ -281,5 +299,5 @@ export function showDashboard(chain, apiKey) {
     `;
   }
 
-  renderTable(chain);
+  renderTable(chain, 'hits', 'desc', membersMap ?? {});
 }

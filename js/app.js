@@ -8,51 +8,89 @@ import * as ui from './ui.js';
 
 const XANAX_PHRASE = "used one of the faction's Xanax items";
 const POINTS_REGEX = /used (\d+) faction points/gi;
+/** Extract XID and display name from profile link: <a href="...profiles.php?XID=2405862">AJMC</a> */
+const PROFILE_LINK_REGEX = /profiles\.php\?XID=(\d+)(?:[^>]*>([^<]*))?/i;
 
 let refreshIntervalId = null;
 let isRefreshing = false;
 
 /**
+ * Extract user ID and name from news text (profile link or fallback)
+ * @param {string} text
+ * @returns {{ id: string, name: string }|null}
+ */
+function extractMemberIdAndName(text) {
+  const match = text.match(PROFILE_LINK_REGEX);
+  if (match) {
+    const id = String(match[1]);
+    const name = (match[2] || '').trim() || extractMemberName(text);
+    return { id, name };
+  }
+  const name = extractMemberName(text);
+  return name ? { id: name, name } : null;
+}
+
+/**
+ * Extract member name from news text (fallback: first part before " used ")
+ * @param {string} text
+ * @returns {string}
+ */
+function extractMemberName(text) {
+  const usedIdx = text.indexOf(' used ');
+  if (usedIdx > 0) {
+    return text.slice(0, usedIdx).replace(/<[^>]+>/g, '').trim();
+  }
+  const words = text.trim().replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean);
+  return words[0] || 'Unknown';
+}
+
+/**
  * Extract consumption (xanax, points) from faction news
+ * Keys by user ID for matching with chain report; stores name for display
  * @param {Object[]} newsItems
  * @param {number} chainStart
  * @param {number} chainEnd
  * @param {Set<string>} [processedIds] - Avoid double-counting on refresh
- * @returns {{ xanax: Record<string, number>, points: Record<string, number> }}
+ * @returns {{ xanax: Record<string, { count: number, name: string }>, points: Record<string, { amount: number, name: string }> }}
  */
 function extractConsumption(newsItems, chainStart, chainEnd, processedIds = new Set()) {
   const xanax = {};
   const points = {};
 
-  const addXanax = (name) => {
-    if (!name) return;
-    xanax[name] = (xanax[name] || 0) + 1;
+  const addXanax = (id, name) => {
+    if (!id) return;
+    const cur = xanax[id] ?? { count: 0, name };
+    xanax[id] = { count: cur.count + 1, name: name || cur.name };
   };
 
-  const addPoints = (name, amount) => {
-    if (!name || !amount) return;
-    points[name] = (points[name] || 0) + amount;
+  const addPoints = (id, amount, name) => {
+    if (!id || !amount) return;
+    const cur = points[id] ?? { amount: 0, name };
+    points[id] = { amount: cur.amount + amount, name: name || cur.name };
   };
 
   for (const item of newsItems) {
     const ts = item.timestamp ?? item.time ?? item.id;
     if (ts < chainStart) continue;
     if (ts > chainEnd) continue;
-    const id = item.id ?? `${ts}-${JSON.stringify(item).slice(0, 50)}`;
-    if (processedIds.has(id)) continue;
-    processedIds.add(id);
+    const itemId = item.id ?? `${ts}-${JSON.stringify(item).slice(0, 50)}`;
+    if (processedIds.has(itemId)) continue;
+    processedIds.add(itemId);
 
     const text = item.news ?? item.text ?? item.content ?? '';
-    const name = item.name ?? extractMemberName(text);
+    const member = extractMemberIdAndName(text);
+    if (!member) continue;
+
+    const { id, name } = member;
 
     if (text.includes(XANAX_PHRASE)) {
-      addXanax(name);
+      addXanax(id, name);
     }
 
     let match;
     const regex = new RegExp(POINTS_REGEX.source, 'gi');
     while ((match = regex.exec(text)) !== null) {
-      addPoints(name, parseInt(match[1], 10));
+      addPoints(id, parseInt(match[1], 10), name);
     }
   }
 
@@ -60,31 +98,17 @@ function extractConsumption(newsItems, chainStart, chainEnd, processedIds = new 
 }
 
 /**
- * Extract member name from news text (typically first part before " used ")
- * @param {string} text
- * @returns {string}
- */
-function extractMemberName(text) {
-  const usedIdx = text.indexOf(' used ');
-  if (usedIdx > 0) {
-    return text.slice(0, usedIdx).trim();
-  }
-  const words = text.trim().split(/\s+/);
-  return words[0] || 'Unknown';
-}
-
-/**
- * Merge consumption into chain, avoiding duplicates via processedIds
+ * Merge consumption into chain (by user id)
  */
 function mergeConsumption(chain, xanax, points) {
   const consumption = chain.consumption ?? {};
-  for (const [name, count] of Object.entries(xanax)) {
-    const cur = consumption[name] ?? { xanax: 0, points: 0 };
-    consumption[name] = { ...cur, xanax: (cur.xanax || 0) + count };
+  for (const [id, data] of Object.entries(xanax)) {
+    const cur = consumption[id] ?? { xanax: 0, points: 0, name: data.name };
+    consumption[id] = { ...cur, xanax: (cur.xanax || 0) + data.count, name: data.name || cur.name };
   }
-  for (const [name, amount] of Object.entries(points)) {
-    const cur = consumption[name] ?? { xanax: 0, points: 0 };
-    consumption[name] = { ...cur, points: (cur.points || 0) + amount };
+  for (const [id, data] of Object.entries(points)) {
+    const cur = consumption[id] ?? { xanax: 0, points: 0, name: data.name };
+    consumption[id] = { ...cur, points: (cur.points || 0) + data.amount, name: data.name || cur.name };
   }
   chain.consumption = consumption;
 }
@@ -182,7 +206,7 @@ async function loadAndSyncChain(apiKey, currentChain) {
     };
   }
   chain.hits = hits;
-  mergeConsumption(chain, consumption.xanax, consumption.points);
+  mergeConsumption(chain, consumption.xanax || {}, consumption.points || {});
   chain.processedNewsIds = Array.from(processedIds);
   chain.end = currentChain.current ? null : (report.end ?? end);
   chain.status = chain.end ? 'finished' : 'active';
@@ -194,6 +218,9 @@ async function loadAndSyncChain(apiKey, currentChain) {
   return chain;
 }
 
+/** Faction members cache: id -> name */
+let factionMembersMap = {};
+
 /**
  * Main init - run on page load
  */
@@ -201,6 +228,7 @@ export async function init() {
   ui.setCallbacks({
     onApiKeySubmit: saveApiKey,
     onSelectChain: selectChain,
+    onLoadMoreChains: loadMoreChains,
   });
 
   try {
@@ -214,18 +242,23 @@ export async function init() {
 
     ui.showLoading();
 
-    const currentChain = await api.fetchCurrentChain(apiKey);
+    const [membersResult, currentChain] = await Promise.all([
+      api.fetchFactionMembers(apiKey).catch(() => []),
+      api.fetchCurrentChain(apiKey),
+    ]);
+    const members = Array.isArray(membersResult) ? membersResult : (membersResult?.members ?? []);
+    factionMembersMap = Object.fromEntries((members ?? []).map((m) => [String(m.id), m.name ?? String(m.id)]));
 
     if (!currentChain || (!currentChain.current && !currentChain.id)) {
-      const apiChainsData = await api.fetchFactionChains(apiKey);
+      const apiChainsData = await api.fetchFactionChains(apiKey, { limit: 10 });
       const apiChains = apiChainsData.chains ?? [];
       const cachedChains = await db.getAllChains();
-      ui.showNoActiveChain(apiChains, cachedChains, apiKey, onFetchChainFromApi);
+      ui.showNoActiveChain(apiChains, cachedChains, apiKey, apiChainsData._metadata, onFetchChainFromApi, loadMoreChains);
       return;
     }
 
     const chain = await loadAndSyncChain(apiKey, currentChain);
-    ui.showDashboard(chain, apiKey);
+    ui.showDashboard(chain, apiKey, factionMembersMap);
     startAutoRefresh(apiKey, chain);
   } catch (err) {
     ui.showError(err.message || 'Failed to load');
@@ -260,7 +293,7 @@ function startAutoRefresh(apiKey, chain) {
       }
 
       const updated = await loadAndSyncChain(apiKey, currentChain);
-      ui.showDashboard(updated, apiKey);
+      ui.showDashboard(updated, apiKey, factionMembersMap);
     } catch {
       // Silent fail on refresh
     } finally {
@@ -298,8 +331,23 @@ export function onApiKeySubmit(key) {
 export async function selectChain(chainId) {
   const chain = await db.getChain(chainId);
   if (chain) {
-    ui.showDashboard(chain, null);
+    ui.showDashboard(chain, null, factionMembersMap);
   }
+}
+
+/**
+ * Load more chains (pagination) for no-active-chain view
+ */
+async function loadMoreChains(apiKey, paginationContext, currentApiChains = []) {
+  const nextUrl = paginationContext?.nextLink ?? paginationContext?.before;
+  const apiChainsData = await api.fetchFactionChains(apiKey, {
+    limit: 10,
+    before: nextUrl || paginationContext?.before,
+  });
+  const newChains = apiChainsData.chains ?? [];
+  const combined = [...currentApiChains, ...newChains];
+  const cachedChains = await db.getAllChains();
+  ui.showNoActiveChain(combined, cachedChains, apiKey, apiChainsData._metadata ?? apiChainsData, onFetchChainFromApi, loadMoreChains, combined);
 }
 
 /**
@@ -316,7 +364,7 @@ async function onFetchChainFromApi(apiKey, chainFromApi) {
       current: null,
     };
     const chain = await loadAndSyncChain(apiKey, chainData);
-    ui.showDashboard(chain, apiKey);
+    ui.showDashboard(chain, apiKey, factionMembersMap);
   } catch (err) {
     ui.showError(err.message || 'Failed to load chain');
     if (err.removeKey) {
@@ -324,9 +372,9 @@ async function onFetchChainFromApi(apiKey, chainFromApi) {
       ui.showApiKeyForm();
       return;
     }
-    const apiChainsData = await api.fetchFactionChains(apiKey);
+    const apiChainsData = await api.fetchFactionChains(apiKey, { limit: 10 });
     const apiChains = apiChainsData.chains ?? [];
     const cachedChains = await db.getAllChains();
-    ui.showNoActiveChain(apiChains, cachedChains, apiKey, onFetchChainFromApi);
+    ui.showNoActiveChain(apiChains, cachedChains, apiKey, apiChainsData._metadata, onFetchChainFromApi, loadMoreChains);
   }
 }
