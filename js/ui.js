@@ -276,23 +276,18 @@ export function showDashboard(chain, apiKey, membersMap = {}) {
         : 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800';
   }
 
-  const header = document.querySelector('#dashboard .mb-6');
-  const existingLink = header?.querySelector('[data-view-chain-history]');
-  if (chain.status === 'active' && apiKey && onViewChainHistoryCallback) {
-    if (!existingLink && header) {
-      const link = document.createElement('a');
-      link.href = '#';
-      link.dataset.viewChainHistory = '';
-      link.className = 'text-sm text-blue-600 hover:text-blue-800 hover:underline ml-2';
-      link.textContent = 'Select other chain';
-      link.addEventListener('click', (e) => {
+  const selectOtherChainLink = document.getElementById('select-other-chain');
+  if (selectOtherChainLink) {
+    if (chain.status === 'active' && apiKey && onViewChainHistoryCallback) {
+      selectOtherChainLink.classList.remove('hidden');
+      selectOtherChainLink.onclick = (e) => {
         e.preventDefault();
         onViewChainHistoryCallback(apiKey);
-      });
-      header.appendChild(link);
+      };
+    } else {
+      selectOtherChainLink.classList.add('hidden');
+      selectOtherChainLink.onclick = null;
     }
-  } else if (existingLink) {
-    existingLink.remove();
   }
 
   const totals = chain.totals ?? {};
