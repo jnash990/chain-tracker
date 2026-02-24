@@ -171,26 +171,73 @@ export function clearError() {
   }
 }
 
-export function showNoActiveChain(chains) {
+function formatDate(ts) {
+  if (!ts) return '—';
+  try {
+    return new Date(ts * 1000).toLocaleString();
+  } catch {
+    return String(ts);
+  }
+}
+
+export function showNoActiveChain(apiChains, cachedChains, apiKey, onFetchChainFromApi) {
   showSection('no-chain');
   const list = document.getElementById('historical-chains');
   if (!list) return;
 
-  if (!chains?.length) {
-    list.innerHTML = '<p class="text-gray-500 text-sm">No historical chains yet.</p>';
+  const sortedApiChains = (apiChains ?? [])
+    .sort((a, b) => (b.id ?? b.chain ?? 0) - (a.id ?? a.chain ?? 0));
+
+  if (sortedApiChains.length === 0 && (!cachedChains || cachedChains.length === 0)) {
+    list.innerHTML = '<p class="text-gray-500 text-sm">No chains found.</p>';
     return;
   }
 
-  list.innerHTML = chains
-    .sort((a, b) => (b.chainId ?? 0) - (a.chainId ?? 0))
-    .slice(0, 10)
-    .map(
-      (c) =>
-        `<button type="button" class="block w-full text-left px-4 py-2 rounded hover:bg-gray-100 text-sm" data-chain-id="${c.chainId}">Chain #${c.chainId} - ${c.status} - ${formatNum(c.totals?.hits ?? 0)} hits</button>`
-    )
-    .join('');
+  let html = '';
 
-  list.querySelectorAll('[data-chain-id]').forEach((btn) => {
+  if (sortedApiChains.length > 0) {
+    html += '<p class="text-xs text-gray-500 uppercase font-medium mb-2">Fetch from API</p>';
+    html += sortedApiChains
+      .map(
+        (c) => {
+          const id = c.id ?? c.chain;
+          const start = formatDate(c.start);
+          const end = formatDate(c.end);
+          return `<button type="button" class="block w-full text-left px-4 py-2 rounded hover:bg-gray-100 text-sm mb-1" data-api-chain data-chain-id="${id}" data-chain-start="${c.start ?? ''}" data-chain-end="${c.end ?? ''}">Chain #${id} — ${start} to ${end}</button>`;
+        }
+      )
+      .join('');
+  }
+
+  const sortedCached = (cachedChains ?? [])
+    .sort((a, b) => (b.chainId ?? 0) - (a.chainId ?? 0))
+    .slice(0, 10);
+
+  if (sortedCached.length > 0) {
+    html += '<p class="text-xs text-gray-500 uppercase font-medium mb-2 mt-4">Previously loaded</p>';
+    html += sortedCached
+      .map(
+        (c) =>
+          `<button type="button" class="block w-full text-left px-4 py-2 rounded hover:bg-gray-100 text-sm mb-1" data-cached-chain data-chain-id="${c.chainId}">Chain #${c.chainId} — ${formatNum(c.totals?.hits ?? 0)} hits (cached)</button>`
+      )
+      .join('');
+  }
+
+  list.innerHTML = html || '<p class="text-gray-500 text-sm">No chains found.</p>';
+
+  list.querySelectorAll('[data-api-chain]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const chainData = {
+        id: Number(btn.dataset.chainId),
+        chain: Number(btn.dataset.chainId),
+        start: Number(btn.dataset.chainStart) || undefined,
+        end: Number(btn.dataset.chainEnd) || undefined,
+      };
+      if (onFetchChainFromApi) onFetchChainFromApi(apiKey, chainData);
+    });
+  });
+
+  list.querySelectorAll('[data-cached-chain]').forEach((btn) => {
     btn.addEventListener('click', () => {
       if (selectChainCallback) selectChainCallback(Number(btn.dataset.chainId));
     });

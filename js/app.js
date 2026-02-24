@@ -217,8 +217,10 @@ export async function init() {
     const currentChain = await api.fetchCurrentChain(apiKey);
 
     if (!currentChain || (!currentChain.current && !currentChain.id)) {
-      const chains = await db.getAllChains();
-      ui.showNoActiveChain(chains);
+      const apiChainsData = await api.fetchFactionChains(apiKey);
+      const apiChains = apiChainsData.chains ?? [];
+      const cachedChains = await db.getAllChains();
+      ui.showNoActiveChain(apiChains, cachedChains, apiKey, onFetchChainFromApi);
       return;
     }
 
@@ -288,11 +290,35 @@ export function onApiKeySubmit(key) {
 }
 
 /**
- * Select a historical chain to view
+ * Select a historical chain to view (from IndexedDB cache)
  */
 export async function selectChain(chainId) {
   const chain = await db.getChain(chainId);
   if (chain) {
     ui.showDashboard(chain, null);
+  }
+}
+
+/**
+ * Fetch chain from API and show dashboard (when user picks from chains list)
+ */
+async function onFetchChainFromApi(apiKey, chainFromApi) {
+  ui.showLoading();
+  try {
+    const chainData = {
+      id: chainFromApi.id ?? chainFromApi.chain,
+      chain_id: chainFromApi.id ?? chainFromApi.chain,
+      start: chainFromApi.start,
+      end: chainFromApi.end,
+      current: null,
+    };
+    const chain = await loadAndSyncChain(apiKey, chainData);
+    ui.showDashboard(chain, apiKey);
+  } catch (err) {
+    ui.showError(err.message || 'Failed to load chain');
+    const apiChainsData = await api.fetchFactionChains(apiKey);
+    const apiChains = apiChainsData.chains ?? [];
+    const cachedChains = await db.getAllChains();
+    ui.showNoActiveChain(apiChains, cachedChains, apiKey, onFetchChainFromApi);
   }
 }

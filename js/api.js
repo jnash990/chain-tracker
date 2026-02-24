@@ -90,6 +90,16 @@ export async function fetchCurrentChain(apiKey) {
 }
 
 /**
+ * Fetch list of previous chains (for when no active chain)
+ * @param {string} apiKey
+ * @returns {Promise<Object>} { chains: [{ id, chain, respect, start, end }, ...] }
+ */
+export async function fetchFactionChains(apiKey) {
+  const url = `${BASE}/faction/chains?limit=100&key=${apiKey}`;
+  return fetchWithRateLimit(url);
+}
+
+/**
  * Fetch chain report (per-member hits and respect)
  * @param {number} chainId
  * @param {string} apiKey
