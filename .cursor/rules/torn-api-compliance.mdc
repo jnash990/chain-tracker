@@ -1,0 +1,34 @@
+---
+description: Torn City API compliance - ToS, rate limits, error handling
+alwaysApply: true
+---
+
+# Torn API Compliance
+
+This project uses the Torn City API. All code must comply with [Torn's API documentation](https://www.torn.com/api.html) and [scripting rules](https://www.torn.com/rules.php).
+
+## Core Rules
+
+1. **API key only** – Never request passwords. Only the 16-character API key.
+2. **Keep keys and data secure** – Store confidentially; never share unless permitted by the key owner.
+3. **Minimize requests** – Request only the selections needed. Avoid redundant or unnecessary calls.
+4. **Rate limits** – Max 100 requests/minute per user across all keys. Use a rolling window and back off on error 5 or HTTP 429.
+5. **Invalid keys** – Remove or clear disabled/invalid keys on error. Multiple requests with bad keys can cause IP bans.
+   - Clear key on error codes: 2 (Incorrect Key), 12 (Key read error), 13 (Owner inactivity), 18 (Key paused).
+6. **ToS disclosure** – Where users enter their API key, clearly state: data storage, data sharing, purpose, key storage, required access level.
+
+## Error Codes (relevant)
+
+- 2: Incorrect Key
+- 5: Too many requests (retry after delay)
+- 8: IP block (from abuse)
+- 12: Key read error
+- 13: Key disabled (owner inactive 7+ days)
+- 16: Key access level insufficient
+- 18: Key paused by owner
+
+## ToS (this app)
+
+- Data stored only in the user's browser (IndexedDB).
+- Key stored locally; never sent except to api.torn.com.
+- Required access: Limited (chain + faction news/armory).

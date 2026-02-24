@@ -34,6 +34,15 @@ Use a Torn faction API key with:
 
 The key is stored locally in IndexedDB and never sent to any server except Torn's API.
 
+## Torn API Compliance
+
+This project follows [Torn's API documentation](https://www.torn.com/api.html) and [scripting rules](https://www.torn.com/rules.php):
+
+- **Terms of Service** – Users see a clear ToS disclosure where they enter their API key (data storage, sharing, purpose, key storage, access level).
+- **Rate limiting** – 50 requests/minute (well under Torn's 100/min limit).
+- **Invalid keys** – Disabled or invalid keys are removed automatically on error (codes 2, 12, 13, 18) to avoid IP bans.
+- **Minimal requests** – Only chain, chain report, chains list, and faction news (armory) are requested.
+
 ## Tech Stack
 
 - TailwindCSS (CDN)

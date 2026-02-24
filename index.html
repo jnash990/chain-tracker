@@ -20,7 +20,26 @@
     <section id="api-key-section">
       <div class="bg-white shadow rounded-lg p-6 max-w-md">
         <h2 class="text-lg font-semibold text-gray-900 mb-4">Enter API Key</h2>
-        <p class="text-sm text-gray-600 mb-4">Provide your Torn faction API key with chain and news permissions.</p>
+        <p class="text-sm text-gray-600 mb-4">Provide your Torn faction API key with chain and news permissions.
+          <a href="https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=Faction+Chain+Consumption+Tracker&faction=chain%2Cchainreport%2Carmorynews%2Cchains" target="_blank" rel="noopener" class="text-blue-600 hover:underline font-medium">Generate API key</a>
+        </p>
+
+        <div class="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-100 text-sm text-gray-700">
+          <p class="font-medium text-gray-900 mb-1">Torn API Terms of Service</p>
+          <p>You maintain full control of your data; everything is stored in your browser. No data is sent anywhere except to Torn's API.</p>
+          <table class="mt-2 text-xs w-full border-collapse">
+            <tr><td class="py-1 font-medium">Data storage</td><td>Only locally (IndexedDB)</td></tr>
+            <tr><td class="py-1 font-medium">Data sharing</td><td>Nobody</td></tr>
+            <tr><td class="py-1 font-medium">Purpose</td><td>Chain tracking for faction leadership</td></tr>
+            <tr><td class="py-1 font-medium">Key storage</td><td>Stored locally / Not shared</td></tr>
+            <tr><td class="py-1 font-medium">Key access level</td><td>Limited (chain + faction news/armory)</td></tr>
+          </table>
+          <p class="mt-2 text-xs">
+            <a href="https://www.torn.com/api.html" target="_blank" rel="noopener" class="text-blue-600 hover:underline">Torn API docs</a> ·
+            <a href="https://www.torn.com/rules.php" target="_blank" rel="noopener" class="text-blue-600 hover:underline">Torn scripting rules</a>
+          </p>
+        </div>
+
         <form id="api-key-form">
           <input
             type="password"

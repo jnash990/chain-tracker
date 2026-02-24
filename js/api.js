@@ -69,6 +69,8 @@ export async function fetchWithRateLimit(url, retried = false) {
   if (data.error) {
     const err = new Error(data.error.error || 'API error');
     err.code = data.error.code;
+    // Torn: remove disabled/invalid keys to avoid IP bans (api.html)
+    err.removeKey = [2, 12, 13, 18].includes(data.error.code);
     throw err;
   }
 
@@ -120,7 +122,9 @@ export async function fetchChainReport(chainId, apiKey) {
 export async function fetchFactionNews({ apiKey, before }) {
   let url;
   if (before && before.startsWith('http')) {
-    url = before;
+    const u = new URL(before);
+    u.searchParams.set('key', apiKey);
+    url = u.toString();
   } else {
     url = `${BASE}/faction/news?cat=armoryAction&stripTags=true&sort=desc&limit=100&key=${apiKey}`;
     if (before) {

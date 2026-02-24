@@ -229,6 +229,9 @@ export async function init() {
     startAutoRefresh(apiKey, chain);
   } catch (err) {
     ui.showError(err.message || 'Failed to load');
+    if (err.removeKey) {
+      await db.setConfig('apiKey', null);
+    }
     ui.showApiKeyForm();
   }
 }
@@ -316,6 +319,11 @@ async function onFetchChainFromApi(apiKey, chainFromApi) {
     ui.showDashboard(chain, apiKey);
   } catch (err) {
     ui.showError(err.message || 'Failed to load chain');
+    if (err.removeKey) {
+      await db.setConfig('apiKey', null);
+      ui.showApiKeyForm();
+      return;
+    }
     const apiChainsData = await api.fetchFactionChains(apiKey);
     const apiChains = apiChainsData.chains ?? [];
     const cachedChains = await db.getAllChains();
