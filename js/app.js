@@ -229,6 +229,7 @@ export async function init() {
     onApiKeySubmit: saveApiKey,
     onSelectChain: selectChain,
     onLoadMoreChains: loadMoreChains,
+    onViewChainHistory: viewChainHistory,
   });
 
   try {
@@ -333,6 +334,17 @@ export async function selectChain(chainId) {
   if (chain) {
     ui.showDashboard(chain, null, factionMembersMap);
   }
+}
+
+/**
+ * Show chain history (from active chain dashboard)
+ */
+async function viewChainHistory(apiKey) {
+  stopAutoRefresh();
+  const apiChainsData = await api.fetchFactionChains(apiKey, { limit: 10 });
+  const apiChains = apiChainsData.chains ?? [];
+  const cachedChains = await db.getAllChains();
+  ui.showNoActiveChain(apiChains, cachedChains, apiKey, apiChainsData._metadata ?? apiChainsData, onFetchChainFromApi, loadMoreChains);
 }
 
 /**

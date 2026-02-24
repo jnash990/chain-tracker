@@ -6,12 +6,14 @@ const container = document.getElementById('app');
 let apiKeySubmitCallback = null;
 let selectChainCallback = null;
 
-export function setCallbacks({ onApiKeySubmit, onSelectChain, onLoadMoreChains }) {
+export function setCallbacks({ onApiKeySubmit, onSelectChain, onLoadMoreChains, onViewChainHistory }) {
   apiKeySubmitCallback = onApiKeySubmit;
   selectChainCallback = onSelectChain;
   onLoadMoreChainsCallback = onLoadMoreChains;
+  onViewChainHistoryCallback = onViewChainHistory;
 }
 let onLoadMoreChainsCallback = null;
+let onViewChainHistoryCallback = null;
 const apiKeySection = document.getElementById('api-key-section');
 const apiKeyForm = document.getElementById('api-key-form');
 const apiKeyInput = document.getElementById('api-key-input');
@@ -272,6 +274,25 @@ export function showDashboard(chain, apiKey, membersMap = {}) {
       chain.status === 'active'
         ? 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800'
         : 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800';
+  }
+
+  const header = document.querySelector('#dashboard .mb-6');
+  const existingLink = header?.querySelector('[data-view-chain-history]');
+  if (chain.status === 'active' && apiKey && onViewChainHistoryCallback) {
+    if (!existingLink && header) {
+      const link = document.createElement('a');
+      link.href = '#';
+      link.dataset.viewChainHistory = '';
+      link.className = 'text-sm text-blue-600 hover:text-blue-800 hover:underline ml-2';
+      link.textContent = 'Select other chain';
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        onViewChainHistoryCallback(apiKey);
+      });
+      header.appendChild(link);
+    }
+  } else if (existingLink) {
+    existingLink.remove();
   }
 
   const totals = chain.totals ?? {};
